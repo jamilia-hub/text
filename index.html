@@ -49,6 +49,18 @@ body {
 }
 .container { max-width: 720px; margin: 0 auto; width: 100%; }
 
+/* min-width: 0 안전장치 — flex/grid 자식이 부모를 넘어서 늘어나는 거 방지 */
+.container,
+.tab-content,
+#activeArea,
+.card-header,
+.card-title-area,
+.card-title,
+.steps,
+.page-progress {
+  min-width: 0;
+}
+
 /* 헤더 */
 .header {
   display: flex;
@@ -501,9 +513,16 @@ body {
 .section-header h2 { margin: 0; font-size: 1.05em; }
 
 /* 권 카드 */
-.cards-grid { display: grid; gap: 10px; width: 100%; max-width: 100%; }
+/* 권 카드 */
+.cards-grid {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+  max-width: 100%;
+  grid-template-columns: minmax(0, 1fr);
+}
 @media (min-width: 800px) {
-  .cards-grid { grid-template-columns: repeat(2, 1fr); }
+  .cards-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 .card {
   background: var(--surface);
@@ -512,7 +531,10 @@ body {
   border-radius: 10px;
   padding: 14px;
   position: relative;
+  width: 100%;
   max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
 }
 .card.publisher-hak { border-left-color: #b56a9b; background: linear-gradient(to right, var(--hak) 0%, var(--surface) 14%); }
 .card.publisher-seoul { border-left-color: #4a7090; background: linear-gradient(to right, var(--seoul) 0%, var(--surface) 14%); }
@@ -1227,7 +1249,15 @@ let state = {
 function load(key, def) {
   try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : def; } catch { return def; }
 }
-function save(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch {} }
+function save(key, val) {
+  try {
+    localStorage.setItem(key, JSON.stringify(val));
+  } catch (e) {
+    // 저장공간 부족, 시크릿 모드, 권한 차단 등 → 사용자에게 즉시 알림
+    console.error('Save failed:', e);
+    showToast('⚠️ 저장 실패! 백업 받아두세요. 새로고침 시 데이터 유실 위험');
+  }
+}
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
 function todayStr() {
   const d = new Date();
@@ -1579,6 +1609,10 @@ function saveVolume() {
   const deadline = document.getElementById('newVolDeadline').value;
   if (!title) { alert('작품명을 입력해주세요'); return; }
   if (!volNum) { alert('권 번호를 입력해주세요'); return; }
+  // 거래처 유효성 검증 (유령 데이터 방지)
+  if (!pubId || !state.publishers.find(p => p.id === pubId)) {
+    alert('거래처를 선택해주세요'); return;
+  }
   const finalNum = /\d+권$/.test(volNum) ? volNum : (/^\d+$/.test(volNum) ? volNum + '권' : volNum);
   if (id) {
     const vol = state.active.find(v => v.id === id);

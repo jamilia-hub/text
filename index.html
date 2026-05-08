@@ -669,7 +669,7 @@ body {
   font-weight: 700;
   font-size: 0.95em;
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 4px;
   min-width: 0;
 }
@@ -685,6 +685,29 @@ body {
   font-weight: 700;
 }
 .card-meta { font-size: 0.72em; color: var(--text2); margin-top: 2px; word-break: break-word; line-height: 1.3; }
+
+/* 카드 액션 줄 — 단계 + 수정/삭제 한 줄 */
+.actions-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  width: 100%;
+  min-width: 0;
+}
+.row-steps {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  flex: 1;
+  min-width: 0;
+}
+.row-actions {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
 
 .card-actions {
   display: flex;
@@ -760,7 +783,7 @@ body {
   border-color: transparent;
   font-weight: 700;
   margin: 0;
-  width: 100%;
+  flex: 1;
   justify-content: center;
   padding: 6px 10px;
   font-size: 0.85em;
@@ -1699,47 +1722,47 @@ function renderVolCard(vol, pub) {
   }
 
   let html = `<div class="card publisher-${pub.color} ${isOverdue ? 'overdue' : ''}">`;
-  html += `<div class="card-header">`;
-  html += `<div class="card-title-area">`;
-  html += `<div class="card-title"><span class="title-name">${esc(vol.title)}</span> <span class="title-vol">${esc(vol.volNum)}</span></div>`;
-  html += `<div class="card-meta">${esc(pub.name)} · ${fmtMoney(price)}</div>`;
+  // 제목줄 (D-day 포함)
+  html += `<div class="card-title">`;
+  html += `<span class="title-name">${esc(vol.title)}</span>`;
+  html += `<span class="title-vol">${esc(vol.volNum)}</span>`;
+  if (vol.deadline) {
+    html += `<span class="deadline ${dl.cls}">${dl.text}</span>`;
+  }
   html += `</div>`;
-  html += `<div class="card-actions">`;
-  html += `<span class="deadline ${dl.cls}">${dl.text}</span>`;
-  html += `<button class="icon-btn" onclick="editVolume('${vol.id}')">✏️</button>`;
-  html += `<button class="icon-btn" onclick="deleteVolume('${vol.id}')">🗑️</button>`;
-  html += `</div></div>`;
+  // 거래처 · 가격
+  html += `<div class="card-meta">${esc(pub.name)} · ${fmtMoney(price)}</div>`;
 
+  // 단계 + 액션 한 줄
+  html += `<div class="actions-row">`;
+  html += `<div class="row-steps">`;
   if (steps.length > 0) {
     if (allDone) {
-      // 단계 다 끝나면 골드 ✓ 납품 칩만 보여줌
-      html += `<div class="steps">`;
       html += `<span class="step-chip deliver-chip" onclick="deliverVolume('${vol.id}')">✓ 납품</span>`;
-      html += `</div>`;
     } else {
-      // 다음 단계 1개 + 발송 (있으면) 만 표시
       const display = [];
       const nonSendSteps = steps.filter(s => s !== '발송');
       const nextNonSend = nonSendSteps.find(s => !done[s]);
       if (nextNonSend) display.push(nextNonSend);
       const sendNotDone = steps.includes('발송') && !done['발송'];
       if (sendNotDone && !display.includes('발송')) display.push('발송');
-
-      if (display.length > 0) {
-        html += `<div class="steps">`;
-        display.forEach(s => {
-          html += `<span class="step-chip" onclick="toggleStep('${vol.id}','${s}')">${s}</span>`;
-        });
-        html += `</div>`;
-      }
+      display.forEach(s => {
+        html += `<span class="step-chip" onclick="toggleStep('${vol.id}','${s}')">${s}</span>`;
+      });
     }
+  }
+  html += `</div>`;
+  html += `<div class="row-actions">`;
+  html += `<button class="icon-btn" onclick="editVolume('${vol.id}')">✏️</button>`;
+  html += `<button class="icon-btn" onclick="deleteVolume('${vol.id}')">🗑️</button>`;
+  html += `</div>`;
+  html += `</div>`;
 
-    if (steps.includes('번역')) {
-      html += `<div class="page-progress">`;
-      html += `<div class="page-bar-wrap"><div class="page-bar-fill" style="width:${pagePct}%"></div></div>`;
-      html += `<button class="page-edit-btn" onclick="editPage('${vol.id}')">${pages}/${total}p</button>`;
-      html += `</div>`;
-    }
+  if (steps.length > 0 && steps.includes('번역')) {
+    html += `<div class="page-progress">`;
+    html += `<div class="page-bar-wrap"><div class="page-bar-fill" style="width:${pagePct}%"></div></div>`;
+    html += `<button class="page-edit-btn" onclick="editPage('${vol.id}')">${pages}/${total}p</button>`;
+    html += `</div>`;
   }
 
   html += `</div>`;

@@ -502,6 +502,38 @@ body {
 }
 .cheer.show { display: block; }
 
+/* 비상 배너 — 마감 D-2 + 윤문/발송 미완료 */
+.urgent-banner {
+  background: linear-gradient(135deg, #c0392b 0%, #e74c3c 100%);
+  color: #fff;
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  box-shadow: 0 2px 12px rgba(192,57,43,0.3);
+  animation: urgent-pulse 1.6s ease-in-out infinite;
+}
+.urgent-title {
+  font-weight: 700;
+  font-size: 0.98em;
+  margin-bottom: 6px;
+  line-height: 1.3;
+}
+.urgent-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 0.82em;
+  line-height: 1.5;
+}
+.urgent-list li {
+  margin: 2px 0;
+  word-break: keep-all;
+}
+.urgent-list strong { font-weight: 800; }
+@keyframes urgent-pulse {
+  0%, 100% { box-shadow: 0 2px 12px rgba(192,57,43,0.3); }
+  50% { box-shadow: 0 2px 20px rgba(231,76,60,0.6); }
+}
+
 .section-header {
   display: flex;
   justify-content: space-between;
@@ -538,6 +570,15 @@ body {
   align-items: center;
 }
 .month-header:first-child { margin-top: 0; }
+.month-header.stamped-header {
+  cursor: pointer;
+  user-select: none;
+  border-bottom-color: var(--gold);
+  color: var(--text2);
+}
+.month-header.stamped-header:active {
+  opacity: 0.7;
+}
 .month-count {
   font-size: 0.78em;
   color: var(--text3);
@@ -992,6 +1033,8 @@ body {
   <div class="tab-content active" id="content-main">
 
   <div class="evolution evo-0" id="evolution"></div>
+
+  <div class="urgent-banner" id="urgentBanner" style="display:none"></div>
 
   <div class="cheer" id="cheer"></div>
 
@@ -1513,6 +1556,15 @@ function renderCheer(st) {
   else { cheer.classList.remove('show'); }
 }
 
+// TODO: 발송 비상 알람 기능
+// - 조건: 마감 D-2 이내 + '발송' 단계 체크 안 됨 (풀 모드 거래처 한정)
+// - 위치: renderActive() 시작 시 또는 별도 함수
+// - UI: 화면 상단에 빨간 배너 또는 모달로 띄움
+// - 메시지 예: "🚨 [작품명 권수] 마감 D-X! 우편 발송 아직 안 됐어요"
+// - 여러 권 동시 위험하면 리스트로 묶어서 표시
+// - 단순화: 화면 켤 때마다 한 번만 띄우기 (계속 띄우면 짜증)
+// - sessionStorage에 'lastUrgentAlert' 저장해서 같은 세션 내 중복 방지 고려
+
 function renderActive() {
   const area = document.getElementById('activeArea');
   if (state.active.length === 0) {
@@ -1553,14 +1605,7 @@ function renderActive() {
 
   let html = '';
 
-  // 도장 카드 (그룹 헤더 X, 맨 위에 그냥 배치)
-  if (stamped.length > 0) {
-    html += '<div class="cards-grid">';
-    stamped.forEach(({vol, pub}) => html += renderVolCard(vol, pub));
-    html += '</div>';
-  }
-
-  // 월별 그룹
+  // 월별 그룹 (먼저)
   const months = Array.from(byMonth.keys()).sort();
   months.forEach(monthKey => {
     const items = byMonth.get(monthKey);
@@ -1594,7 +1639,26 @@ function renderActive() {
     html += '</div>';
   }
 
+  // 도장 카드 (맨 아래, 토글 가능)
+  if (stamped.length > 0) {
+    const showStamped = load('showStamped', true);
+    html += `<div class="month-header stamped-header" onclick="toggleStamped()">
+      🎉 또 해냄 <span class="month-count">${stamped.length}권 ${showStamped ? '▼' : '▶'}</span>
+    </div>`;
+    if (showStamped) {
+      html += '<div class="cards-grid">';
+      stamped.forEach(({vol, pub}) => html += renderVolCard(vol, pub));
+      html += '</div>';
+    }
+  }
+
   area.innerHTML = html;
+}
+
+function toggleStamped() {
+  const cur = load('showStamped', true);
+  save('showStamped', !cur);
+  render();
 }
 
 function getWeekKey(d) {
@@ -1634,9 +1698,6 @@ function renderVolCard(vol, pub) {
     return h;
   }
 
-  // 남은 단계만 표시 (체크된 거 숨김)
-  const remaining = steps.filter(s => !done[s]);
-
   let html = `<div class="card publisher-${pub.color} ${isOverdue ? 'overdue' : ''}">`;
   html += `<div class="card-header">`;
   html += `<div class="card-title-area">`;
@@ -1655,13 +1716,22 @@ function renderVolCard(vol, pub) {
       html += `<div class="steps">`;
       html += `<span class="step-chip deliver-chip" onclick="deliverVolume('${vol.id}')">✓ 납품</span>`;
       html += `</div>`;
-    } else if (remaining.length > 0) {
-      // 남은 단계만 표시
-      html += `<div class="steps">`;
-      remaining.forEach(s => {
-        html += `<span class="step-chip" onclick="toggleStep('${vol.id}','${s}')">${s}</span>`;
-      });
-      html += `</div>`;
+    } else {
+      // 다음 단계 1개 + 발송 (있으면) 만 표시
+      const display = [];
+      const nonSendSteps = steps.filter(s => s !== '발송');
+      const nextNonSend = nonSendSteps.find(s => !done[s]);
+      if (nextNonSend) display.push(nextNonSend);
+      const sendNotDone = steps.includes('발송') && !done['발송'];
+      if (sendNotDone && !display.includes('발송')) display.push('발송');
+
+      if (display.length > 0) {
+        html += `<div class="steps">`;
+        display.forEach(s => {
+          html += `<span class="step-chip" onclick="toggleStep('${vol.id}','${s}')">${s}</span>`;
+        });
+        html += `</div>`;
+      }
     }
 
     if (steps.includes('번역')) {
@@ -2403,12 +2473,75 @@ function openDayDetail(dStr) {
 function render() {
   renderStats();
   renderEvolution();
+  renderUrgentAlert();
   renderActive();
   renderJapan();
   renderHistory();
   // 달력 탭이 활성화돼있으면 같이 갱신
   const calContent = document.getElementById('content-calendar');
   if (calContent && calContent.classList.contains('active')) renderCalendar();
+}
+
+function renderUrgentAlert() {
+  const banner = document.getElementById('urgentBanner');
+  if (!banner) return;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const limit = new Date(today);
+  limit.setDate(limit.getDate() + 2); // D-2 이내
+
+  const urgent = [];
+  state.active.forEach(vol => {
+    if (vol.delivered) return;
+    if (!vol.deadline) return;
+    const d = new Date(vol.deadline);
+    d.setHours(0, 0, 0, 0);
+    if (d > limit) return;
+    const pub = state.publishers.find(p => p.id === vol.pubId);
+    if (!pub) return;
+    const steps = STEPS[pub.mode] || [];
+    const done = vol.steps || {};
+    const yunmunNotDone = steps.includes('윤문기') && !done['윤문기'];
+    const sendNotDone = steps.includes('발송') && !done['발송'];
+    if (yunmunNotDone || sendNotDone) {
+      const dDay = Math.floor((d - today) / 86400000);
+      urgent.push({ vol, pub, yunmunNotDone, sendNotDone, dDay });
+    }
+  });
+
+  if (urgent.length === 0) {
+    banner.style.display = 'none';
+    return;
+  }
+
+  // 권수에 따라 메시지 강도 차이
+  const titles = {
+    1: '⚠️ 우체국 가야 한다 ㅇㅅㅇ',
+    2: '🚨 뽈랑이 식량 흔들리는 소리',
+    3: '🔥 거래처 신뢰 바닥치는 소리 들린다',
+    5: '💀 캬하하 플렉스 깨질 위기',
+  };
+  let title;
+  if (urgent.length >= 5) title = titles[5];
+  else if (urgent.length >= 3) title = titles[3];
+  else if (urgent.length >= 2) title = titles[2];
+  else title = titles[1];
+
+  let html = `<div class="urgent-title">${title}</div>`;
+  html += '<ul class="urgent-list">';
+  urgent.forEach(u => {
+    let dStr;
+    if (u.dDay < 0) dStr = `${Math.abs(u.dDay)}일 지남`;
+    else if (u.dDay === 0) dStr = '오늘 마감';
+    else dStr = `D-${u.dDay}`;
+    const issues = [];
+    if (u.yunmunNotDone) issues.push('윤문 X');
+    if (u.sendNotDone) issues.push('발송 X');
+    html += `<li>${esc(u.vol.title)} ${esc(u.vol.volNum)} <strong>${dStr}</strong> — ${issues.join(' / ')}</li>`;
+  });
+  html += '</ul>';
+  banner.innerHTML = html;
+  banner.style.display = 'block';
 }
 
 init();

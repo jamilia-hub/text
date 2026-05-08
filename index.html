@@ -622,31 +622,34 @@ body {
   opacity: 0.92;
   background: linear-gradient(to right, #fff8e7 0%, var(--surface) 25%);
   border-left-color: var(--gold);
+  padding: 8px 10px;
 }
+.delivered-card .card-title { font-size: 0.85em; }
+.delivered-card .card-meta { font-size: 0.65em; }
 .delivered-stamp {
   position: absolute;
   top: 50%;
-  right: 12px;
+  right: 8px;
   transform: translateY(-50%) rotate(-12deg);
-  width: 56px;
-  height: 56px;
+  width: 42px;
+  height: 42px;
   border-radius: 50%;
-  border: 3px double #c0392b;
+  border: 2px double #c0392b;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-direction: column;
   font-family: 'Noto Sans KR', serif;
-  font-size: 0.85em;
+  font-size: 0.65em;
   font-weight: 900;
   color: #c0392b;
-  letter-spacing: 1px;
+  letter-spacing: 0.5px;
   line-height: 1.05;
   background: rgba(255,255,255,0.5);
   pointer-events: none;
   z-index: 2;
   text-align: center;
-  box-shadow: 0 0 0 2px rgba(192,57,43,0.15);
+  box-shadow: 0 0 0 1px rgba(192,57,43,0.15);
   text-shadow: 0 0 1px rgba(192,57,43,0.3);
 }
 .delivered-card .card-meta { color: var(--text2); }
@@ -737,12 +740,12 @@ body {
   background: transparent;
   border: none;
   cursor: pointer;
-  padding: 4px;
-  font-size: 0.95em;
+  padding: 2px;
+  font-size: 0.85em;
   color: var(--text3);
   border-radius: 6px;
-  min-width: 28px;
-  min-height: 28px;
+  min-width: 24px;
+  min-height: 24px;
   touch-action: manipulation;
 }
 .icon-btn:active { background: var(--surface2); }
@@ -755,18 +758,19 @@ body {
   margin: 8px 0;
 }
 .step-chip {
-  padding: 4px 8px;
+  padding: 3px 7px;
   border: 1px solid var(--border);
-  border-radius: 12px;
-  font-size: 0.72em;
+  border-radius: 11px;
+  font-size: 0.68em;
   cursor: pointer;
   background: var(--surface);
   user-select: none;
   font-weight: 500;
-  min-height: 24px;
+  min-height: 22px;
   display: inline-flex;
   align-items: center;
   touch-action: manipulation;
+  white-space: nowrap;
 }
 .step-chip:active { background: var(--surface2); }
 .step-chip.done {
@@ -1709,14 +1713,14 @@ function renderVolCard(vol, pub) {
   if (vol.delivered) {
     let h = `<div class="card publisher-${pub.color} delivered-card">`;
     h += `<div class="delivered-stamp"><span>또</span><span>해냄</span></div>`;
-    h += `<div class="card-header">`;
-    h += `<div class="card-title-area">`;
-    h += `<div class="card-title"><span class="title-name">${esc(vol.title)}</span> <span class="title-vol">${esc(vol.volNum)}</span></div>`;
-    h += `<div class="card-meta">${esc(pub.name)} · ${fmtMoney(price)} · ${esc(vol.deliveredAt || '')} 납품</div>`;
+    h += `<div class="card-title">`;
+    h += `<span class="title-name">${esc(vol.title)}</span>`;
+    h += `<span class="title-vol">${esc(vol.volNum)}</span>`;
     h += `</div>`;
-    h += `<div class="card-actions">`;
+    h += `<div class="card-meta">${esc(pub.name)} · ${fmtMoney(price)} · ${esc(vol.deliveredAt || '')}</div>`;
+    h += `<div class="row-actions" style="margin-top:4px;justify-content:flex-end;display:flex;">`;
     h += `<button class="icon-btn" onclick="archiveDelivered('${vol.id}')" title="이력으로 이동">📤</button>`;
-    h += `</div></div>`;
+    h += `</div>`;
     h += `</div>`;
     return h;
   }

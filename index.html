@@ -878,6 +878,28 @@ body {
 .deliver-btn:disabled { background: var(--border2); cursor: not-allowed; transform: none; }
 
 /* 일본거래처 카드 */
+.japan-summary {
+  background: linear-gradient(135deg, #fff 0%, #fff5f0 100%);
+  border: 1.5px solid #e8a17a;
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin-bottom: 10px;
+  font-size: 0.92em;
+  font-weight: 600;
+  color: #8a5028;
+  line-height: 1.6;
+}
+.japan-summary .krw-approx {
+  color: #b07058;
+  font-weight: 500;
+  font-size: 0.9em;
+}
+.japan-summary .rate-note {
+  font-size: 0.75em;
+  color: #b07058;
+  font-weight: 400;
+  margin-top: 4px;
+}
 .japan-card {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -1276,8 +1298,8 @@ body {
       <input type="text" id="japanAmount" placeholder="예: 30페이지 / 5000자 / 3시간">
     </div>
     <div class="form-row">
-      <label>금액 (만원)</label>
-      <input type="number" id="japanPrice" inputmode="decimal" step="0.1" placeholder="예: 25">
+      <label>금액 (만엔)</label>
+      <input type="number" id="japanPrice" inputmode="decimal" step="0.1" placeholder="예: 3 (= 3만엔 = ¥30,000)">
     </div>
     <div class="form-row">
       <label>메모 / 진행상황</label>
@@ -1345,6 +1367,10 @@ const KEYS = {
   lastBackup: 'tracker_last_backup',
 };
 
+// 엔화 → 원화 환율 (¥100 ≈ ₩950 기준, 1엔 = 9.5원)
+// 환율 변하면 이 숫자만 바꾸면 됨
+const JPY_TO_KRW = 9.5;
+
 const STEPS = {
   full: ['넘버링', 'OCR', '윤문기', '번역'],
   short: ['윤문기', '번역'],
@@ -1411,6 +1437,10 @@ function fmtMoney(won) {
   if (!won) return '0원';
   if (won >= 10000) return (won / 10000).toFixed(won % 10000 === 0 ? 0 : 1) + '만원';
   return won.toLocaleString() + '원';
+}
+function fmtYen(yen) {
+  if (!yen) return '¥0';
+  return '¥' + yen.toLocaleString();
 }
 function fmtDeadline(dateStr) {
   if (!dateStr) return { text: '마감 X', cls: 'safe', days: null };
@@ -1525,14 +1555,16 @@ function getStats() {
     if (d.startsWith(monthStr)) { st.month++; mn.month += h.price; }
     if (d.startsWith(yearStr)) { st.year++; mn.year += h.price; }
   });
+  // 일본 거래처는 엔화 → 원화 환산해서 합산 (권 수는 안 올림, 만화 X)
   state.japan.forEach(j => {
     if (j.status !== 'done') return;
     const d = j.date;
     if (!d) return;
-    if (d === today) { mn.today += (j.price || 0) * 10000; }
-    if (d >= monStr) { mn.week += (j.price || 0) * 10000; }
-    if (d.startsWith(monthStr)) { mn.month += (j.price || 0) * 10000; }
-    if (d.startsWith(yearStr)) { mn.year += (j.price || 0) * 10000; }
+    const krw = (j.price || 0) * 10000 * JPY_TO_KRW;
+    if (d === today) { mn.today += krw; }
+    if (d >= monStr) { mn.week += krw; }
+    if (d.startsWith(monthStr)) { mn.month += krw; }
+    if (d.startsWith(yearStr)) { mn.year += krw; }
   });
   return { st, mn };
 }
@@ -2168,11 +2200,30 @@ function renderJapan() {
     area.innerHTML = '<div class="empty">일본거래처 작업 없음</div>';
     return;
   }
+  // 엔화 누적 합계 (이번 달 / 올해 / 전체)
+  const today = todayStr();
+  const monthStr = today.slice(0, 7);
+  const yearStr = today.slice(0, 4);
+  let monthYen = 0, yearYen = 0, totalYen = 0;
+  state.japan.forEach(j => {
+    if (j.status !== 'done') return;
+    const yen = (j.price || 0) * 10000;
+    totalYen += yen;
+    if (j.date && j.date.startsWith(yearStr)) yearYen += yen;
+    if (j.date && j.date.startsWith(monthStr)) monthYen += yen;
+  });
   const sorted = [...state.japan].sort((a, b) => {
     if (a.status !== b.status) return a.status === 'active' ? -1 : 1;
     return (b.date || '').localeCompare(a.date || '');
   });
   let html = '';
+  if (totalYen > 0) {
+    html += `<div class="japan-summary">
+      <div>🗾 이번 달 ${fmtYen(monthYen)} <span class="krw-approx">≈ ${fmtMoney(Math.round(monthYen * JPY_TO_KRW))}</span></div>
+      <div>　　 올해 ${fmtYen(yearYen)} <span class="krw-approx">≈ ${fmtMoney(Math.round(yearYen * JPY_TO_KRW))}</span></div>
+      <div class="rate-note">환율 ¥100 = ₩${(JPY_TO_KRW * 100).toFixed(0)} 적용</div>
+    </div>`;
+  }
   sorted.forEach(j => {
     const statusBadge = j.status === 'done'
       ? '<span class="deadline safe">✅ 완료</span>'
@@ -2181,7 +2232,7 @@ function renderJapan() {
       <div class="card-header">
         <div class="card-title-area">
           <div class="card-title">${esc(j.name)}</div>
-          <div class="card-meta">${esc(j.date || '날짜 X')}${j.amount ? ' · ' + esc(j.amount) : ''} · ${fmtMoney((j.price||0)*10000)}</div>
+          <div class="card-meta">${esc(j.date || '날짜 X')}${j.amount ? ' · ' + esc(j.amount) : ''} · ${fmtYen((j.price||0)*10000)}</div>
         </div>
         <div class="card-actions">
           ${statusBadge}
@@ -2632,7 +2683,6 @@ function renderUrgentAlert() {
   // 비상 (빨강)
   if (urgent.length > 0) {
     const titles = {
-      1: '⚠️ 우체국 가야 한다 ㅇㅅㅇ',
       2: '🚨 뽈랑이 식량 흔들리는 소리',
       3: '🔥 거래처 신뢰 바닥치는 소리 들린다',
       5: '💀 캬하하 플렉스 깨질 위기',
@@ -2641,7 +2691,15 @@ function renderUrgentAlert() {
     if (urgent.length >= 5) title = titles[5];
     else if (urgent.length >= 3) title = titles[3];
     else if (urgent.length >= 2) title = titles[2];
-    else title = titles[1];
+    else {
+      // 1권 비상 — 실제로 뭐가 미완인지에 따라 메시지 분기
+      const issues = urgent[0].issues;
+      const hasSend = issues.includes('발송');
+      const hasWork = issues.some(s => s !== '발송');
+      if (hasSend && hasWork) title = '⚠️ 우체국 + 작업 둘 다 X ㅇㅅㅇ';
+      else if (hasSend) title = '⚠️ 우체국 가야 한다 ㅇㅅㅇ';
+      else title = '⚠️ 작업 마감 늦었다 ㅇㅅㅇ';
+    }
 
     html += `<div class="urgent-block urgent-danger">`;
     html += `<div class="urgent-title">${title}</div>`;

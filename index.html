@@ -1298,8 +1298,8 @@ body {
       <input type="text" id="japanAmount" placeholder="예: 30페이지 / 5000자 / 3시간">
     </div>
     <div class="form-row">
-      <label>금액 (만엔)</label>
-      <input type="number" id="japanPrice" inputmode="decimal" step="0.1" placeholder="예: 3 (= 3만엔 = ¥30,000)">
+      <label>금액 (엔)</label>
+      <input type="number" id="japanPrice" inputmode="numeric" step="1" placeholder="예: 30000 (= ¥30,000)">
     </div>
     <div class="form-row">
       <label>메모 / 진행상황</label>
@@ -1508,6 +1508,15 @@ function init() {
   });
   if (migrated) save(KEYS.active, state.active);
 
+  // 일본 거래처: 만엔 단위(j.price) → 엔 단위로 마이그레이션 (1회성)
+  if (!localStorage.getItem('tracker_japan_yen_migrated_v1')) {
+    state.japan.forEach(j => {
+      if (j.price) j.price = j.price * 10000;
+    });
+    save(KEYS.japan, state.japan);
+    localStorage.setItem('tracker_japan_yen_migrated_v1', '1');
+  }
+
   // 좀비 도장 카드 정리: history에 없는 historyId를 가진 delivered 카드 제거
   const historyIds = new Set(state.history.map(h => h.id));
   const beforeLen = state.active.length;
@@ -1560,7 +1569,7 @@ function getStats() {
     if (j.status !== 'done') return;
     const d = j.date;
     if (!d) return;
-    const krw = (j.price || 0) * 10000 * JPY_TO_KRW;
+    const krw = (j.price || 0) * JPY_TO_KRW;
     if (d === today) { mn.today += krw; }
     if (d >= monStr) { mn.week += krw; }
     if (d.startsWith(monthStr)) { mn.month += krw; }
@@ -2207,7 +2216,7 @@ function renderJapan() {
   let monthYen = 0, yearYen = 0, totalYen = 0;
   state.japan.forEach(j => {
     if (j.status !== 'done') return;
-    const yen = (j.price || 0) * 10000;
+    const yen = (j.price || 0);
     totalYen += yen;
     if (j.date && j.date.startsWith(yearStr)) yearYen += yen;
     if (j.date && j.date.startsWith(monthStr)) monthYen += yen;
@@ -2232,7 +2241,7 @@ function renderJapan() {
       <div class="card-header">
         <div class="card-title-area">
           <div class="card-title">${esc(j.name)}</div>
-          <div class="card-meta">${esc(j.date || '날짜 X')}${j.amount ? ' · ' + esc(j.amount) : ''} · ${fmtYen((j.price||0)*10000)}</div>
+          <div class="card-meta">${esc(j.date || '날짜 X')}${j.amount ? ' · ' + esc(j.amount) : ''} · ${fmtYen(j.price||0)}</div>
         </div>
         <div class="card-actions">
           ${statusBadge}

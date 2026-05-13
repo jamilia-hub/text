@@ -217,6 +217,10 @@ body {
   background: #c0392b;
   border: 1px solid rgba(192,57,43,0.5);
 }
+.cal-stamp.japan {
+  background: #e8a17a;
+  border-color: rgba(232,161,122,0.5);
+}
 .cal-deadline-mark {
   font-size: 0.7em;
   color: var(--warn);
@@ -2465,9 +2469,18 @@ function renderCalendar() {
   const monthMoney = state.history
     .filter(h => h.deliveredAt && h.deliveredAt.startsWith(monthStr))
     .reduce((s, h) => s + (h.price || 0), 0);
+  // 일본 거래처 이번 달 (완료 건)
+  const monthJapan = state.japan.filter(j => j.status === 'done' && j.date && j.date.startsWith(monthStr));
+  const japanYen = monthJapan.reduce((s, j) => s + (j.price || 0), 0);
+  const japanKrw = Math.round(japanYen * JPY_TO_KRW);
+  const totalMoney = monthMoney + japanKrw;
+
   const stat = document.getElementById('calMonthStat');
-  if (monthCount > 0) {
-    stat.textContent = `이번 달 ${monthCount}권 작업 중! · ${fmtMoney(monthMoney)}`;
+  if (monthCount > 0 || monthJapan.length > 0) {
+    const parts = [];
+    if (monthCount > 0) parts.push(`${monthCount}권`);
+    if (monthJapan.length > 0) parts.push(`일본 ${monthJapan.length}건`);
+    stat.textContent = `이번 달 ${parts.join(' + ')} · ${fmtMoney(totalMoney)}`;
   } else if (year === new Date().getFullYear() && month === new Date().getMonth()) {
     stat.textContent = `이번 달 시작!`;
   } else {
@@ -2480,16 +2493,21 @@ function renderCalendar() {
   // 월요일 시작 (일=0...토=6 → 월=0이 되도록 (getDay() + 6) % 7)
   const startOffset = (firstDay.getDay() + 6) % 7;
 
-  // 일자별 데이터 모으기
+  // 일자별 데이터 모으기 (납품 + 일본 완료 + 마감)
   const dayData = {};
   state.history.forEach(h => {
     if (h.deliveredAt && h.deliveredAt.startsWith(monthStr)) {
-      (dayData[h.deliveredAt] = dayData[h.deliveredAt] || { delivers: [], deadlines: [] }).delivers.push(h);
+      (dayData[h.deliveredAt] = dayData[h.deliveredAt] || { delivers: [], japan: [], deadlines: [] }).delivers.push(h);
+    }
+  });
+  state.japan.forEach(j => {
+    if (j.status === 'done' && j.date && j.date.startsWith(monthStr)) {
+      (dayData[j.date] = dayData[j.date] || { delivers: [], japan: [], deadlines: [] }).japan.push(j);
     }
   });
   state.active.forEach(vol => {
     if (vol.deadline && vol.deadline.startsWith(monthStr) && !vol.delivered) {
-      (dayData[vol.deadline] = dayData[vol.deadline] || { delivers: [], deadlines: [] }).deadlines.push(vol);
+      (dayData[vol.deadline] = dayData[vol.deadline] || { delivers: [], japan: [], deadlines: [] }).deadlines.push(vol);
     }
   });
 
@@ -2508,7 +2526,7 @@ function renderCalendar() {
   // 일자 칸
   for (let d = 1; d <= numDays; d++) {
     const dStr = `${monthStr}-${String(d).padStart(2,'0')}`;
-    const data = dayData[dStr] || { delivers: [], deadlines: [] };
+    const data = dayData[dStr] || { delivers: [], japan: [], deadlines: [] };
     const cls = ['cal-day'];
     if (dStr === today) cls.push('today');
     if (data.deadlines.length > 0) {
@@ -2520,13 +2538,17 @@ function renderCalendar() {
     html += `<div class="${cls.join(' ')}" onclick="openDayDetail('${dStr}')">`;
     html += `<div class="cal-day-num">${d}</div>`;
     html += `<div class="cal-stamps">`;
-    // 납품 도장 도트 (최대 6개 표시, 그 이상이면 +N)
+    // 도장: 만화 납품(녹색) + 일본 완료(주황). 합쳐서 최대 6개.
+    const allStamps = [
+      ...data.delivers.map(() => 'manga'),
+      ...data.japan.map(() => 'japan'),
+    ];
     const max = 6;
-    data.delivers.slice(0, max).forEach(() => {
-      html += `<span class="cal-stamp"></span>`;
+    allStamps.slice(0, max).forEach(type => {
+      html += `<span class="cal-stamp ${type === 'japan' ? 'japan' : ''}"></span>`;
     });
-    if (data.delivers.length > max) {
-      html += `<span style="font-size:0.85em;color:var(--text3);">+${data.delivers.length - max}</span>`;
+    if (allStamps.length > max) {
+      html += `<span style="font-size:0.85em;color:var(--text3);">+${allStamps.length - max}</span>`;
     }
     html += `</div>`;
     if (data.deadlines.length > 0) {
@@ -2545,13 +2567,14 @@ function renderCalMonthList(monthStr) {
   const area = document.getElementById('calMonthList');
   if (!area) return;
   const monthHistory = state.history.filter(h => h.deliveredAt && h.deliveredAt.startsWith(monthStr));
+  const monthJapan = state.japan.filter(j => j.status === 'done' && j.date && j.date.startsWith(monthStr));
 
-  if (monthHistory.length === 0) {
+  if (monthHistory.length === 0 && monthJapan.length === 0) {
     area.innerHTML = '';
     return;
   }
 
-  // 출판사별 그룹
+  // 출판사별 그룹 (만화)
   const byPub = {};
   monthHistory.forEach(h => {
     if (!byPub[h.pubId]) {
@@ -2566,11 +2589,17 @@ function renderCalMonthList(monthStr) {
   // 권 수 많은 순으로 정렬
   const groups = Object.values(byPub).sort((a, b) => b.items.length - a.items.length);
 
-  const totalCount = monthHistory.length;
-  const totalMoney = monthHistory.reduce((s, h) => s + (h.price || 0), 0);
+  const mangaMoney = monthHistory.reduce((s, h) => s + (h.price || 0), 0);
+  const japanYen = monthJapan.reduce((s, j) => s + (j.price || 0), 0);
+  const japanKrw = Math.round(japanYen * JPY_TO_KRW);
+  const totalMoney = mangaMoney + japanKrw;
+
+  const countParts = [];
+  if (monthHistory.length > 0) countParts.push(`${monthHistory.length}권`);
+  if (monthJapan.length > 0) countParts.push(`일본 ${monthJapan.length}건`);
 
   let html = '<div class="cal-month-list">';
-  html += `<div class="cal-list-title">📚 이 달 작품 <span class="cal-list-total">${totalCount}권 · ${fmtMoney(totalMoney)}</span></div>`;
+  html += `<div class="cal-list-title">📚 이 달 작품 <span class="cal-list-total">${countParts.join(' + ')} · ${fmtMoney(totalMoney)}</span></div>`;
 
   groups.forEach(group => {
     const total = group.items.reduce((s, h) => s + (h.price || 0), 0);
@@ -2588,12 +2617,28 @@ function renderCalMonthList(monthStr) {
     html += `</div>`;
   });
 
+  // 일본 거래처 그룹 (있을 때만)
+  if (monthJapan.length > 0) {
+    html += `<div class="pub-group publisher-emit">`;
+    html += `<div class="pub-group-header">`;
+    html += `<span class="pub-group-name">🗾 에미트 (일본)</span>`;
+    html += `<span class="pub-group-stat">${monthJapan.length}건 · ${fmtYen(japanYen)} <span class="krw-approx">≈ ${fmtMoney(japanKrw)}</span></span>`;
+    html += `</div>`;
+    monthJapan.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    monthJapan.forEach(j => {
+      const dd = j.date ? parseInt(j.date.slice(8)) : '?';
+      html += `<div class="pub-group-item">${esc(j.name)} <span class="pub-group-meta">· ${dd}일 · ${fmtYen(j.price || 0)}</span></div>`;
+    });
+    html += `</div>`;
+  }
+
   html += '</div>';
   area.innerHTML = html;
 }
 
 function openDayDetail(dStr) {
   const delivers = state.history.filter(h => h.deliveredAt === dStr);
+  const japanItems = state.japan.filter(j => j.status === 'done' && j.date === dStr);
   const deadlines = state.active.filter(v => v.deadline === dStr);
 
   // 보기 좋은 날짜 포맷
@@ -2606,6 +2651,15 @@ function openDayDetail(dStr) {
     html += `<div class="day-section"><h4>🎉 납품 (${delivers.length}권 · ${fmtMoney(total)})</h4>`;
     delivers.forEach(h => {
       html += `<div class="day-item"><strong>${esc(h.title)} ${esc(h.volNum)}</strong> · ${esc(h.pubName)} · ${fmtMoney(h.price)}</div>`;
+    });
+    html += `</div>`;
+  }
+  if (japanItems.length > 0) {
+    const totalYen = japanItems.reduce((s, j) => s + (j.price || 0), 0);
+    const totalKrw = Math.round(totalYen * JPY_TO_KRW);
+    html += `<div class="day-section"><h4>🗾 일본 거래처 (${japanItems.length}건 · ${fmtYen(totalYen)} ≈ ${fmtMoney(totalKrw)})</h4>`;
+    japanItems.forEach(j => {
+      html += `<div class="day-item"><strong>${esc(j.name)}</strong>${j.amount ? ' · ' + esc(j.amount) : ''} · ${fmtYen(j.price || 0)}</div>`;
     });
     html += `</div>`;
   }

@@ -1087,6 +1087,81 @@ body {
   background: var(--bg);
   border-radius: 6px;
 }
+
+
+/* 복구 브리핑 */
+.recovery-panel {
+  background: linear-gradient(135deg, #f7f2e8 0%, #fff 100%);
+  border: 1px solid var(--border2);
+  border-left: 5px solid var(--accent);
+  border-radius: 12px;
+  padding: 12px;
+  margin: 0 0 14px 0;
+}
+.recovery-panel.empty { display: none; }
+.recovery-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: flex-start;
+  margin-bottom: 8px;
+}
+.recovery-title { font-weight: 800; font-size: 0.95em; color: var(--text); }
+.recovery-sub { font-size: 0.76em; color: var(--text2); line-height: 1.45; margin-top: 2px; }
+.recovery-total {
+  font-size: 0.78em;
+  font-weight: 700;
+  color: var(--accent);
+  background: rgba(92,122,92,0.10);
+  border: 1px solid rgba(92,122,92,0.18);
+  border-radius: 999px;
+  padding: 5px 9px;
+  white-space: nowrap;
+}
+.recovery-list { display: grid; gap: 6px; }
+.recovery-item {
+  background: rgba(255,255,255,0.82);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 8px 9px;
+  font-size: 0.8em;
+  line-height: 1.45;
+}
+.recovery-item.danger { border-color: rgba(168,58,58,0.25); background: rgba(168,58,58,0.06); }
+.recovery-item.warn { border-color: rgba(214,138,58,0.28); background: rgba(214,138,58,0.07); }
+.recovery-main { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.recovery-name { font-weight: 700; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.recovery-pill { font-size: 0.72em; font-weight: 700; white-space: nowrap; }
+.recovery-detail { color: var(--text2); margin-top: 3px; }
+.recovery-note { color: var(--text3); font-size: 0.74em; margin-top: 3px; }
+.blackout-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  background: var(--surface2);
+  border-radius: 8px;
+  font-size: 0.86em;
+}
+.blackout-row .date { font-weight: 700; color: var(--text); }
+.blackout-row .label { color: var(--text2); margin-left: 4px; }
+.add-blackout-form {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr auto;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.add-blackout-form input { min-height: 38px; }
+@media (max-width: 520px) {
+  .add-blackout-form { grid-template-columns: 1fr; }
+  .recovery-top { flex-direction: column; }
+  .recovery-total { white-space: normal; }
+}
+
 </style>
 </head>
 <body>
@@ -1096,6 +1171,7 @@ body {
     <h1>📊 번역 트래커</h1>
     <div class="header-actions">
       <button class="btn btn-sm" onclick="openBackup()">💾 백업</button>
+      <button class="btn btn-sm" onclick="openBlackoutMgmt()">🗓️</button>
       <button class="btn btn-sm" onclick="openPublisherMgmt()">⚙️</button>
       <button class="btn btn-sm" onclick="openGoalMgmt()">🎯</button>
     </div>
@@ -1111,6 +1187,8 @@ body {
   <div class="evolution evo-0" id="evolution"></div>
 
   <div class="urgent-banner" id="urgentBanner" style="display:none"></div>
+
+  <div class="recovery-panel empty" id="recoveryPanel"></div>
 
   <div class="cheer" id="cheer"></div>
 
@@ -1214,6 +1292,11 @@ body {
     <div class="form-row">
       <label>마감일</label>
       <input type="date" id="newVolDeadline">
+    </div>
+    <div class="form-row">
+      <label>납품 예정 시간 (선택)</label>
+      <input type="time" id="newVolDeadlineTime">
+      <div class="help">넥스큐브식으로 시간까지 박아두면 착수 버튼이 빨리 눌려요</div>
     </div>
     <div class="modal-actions">
       <button class="btn" onclick="closeModal('modalNewVol')">취소</button>
@@ -1324,6 +1407,24 @@ body {
   </div>
 </div>
 
+
+<!-- 작업불가일 모달 -->
+<div class="modal-bg" id="modalBlackout">
+  <div class="modal">
+    <h3>🗓️ 작업불가일 관리 <button class="modal-close" onclick="closeModal('modalBlackout')">✕</button></h3>
+    <div class="help" style="margin-bottom:10px">공연·병원·발레 회복일처럼 작업량이 줄어드는 날을 넣어두면 복구 브리핑 계산에서 제외합니다.</div>
+    <div id="blackoutList"></div>
+    <div class="add-blackout-form">
+      <input type="date" id="blackoutDate">
+      <input type="text" id="blackoutLabel" placeholder="예: 공연 / 발레 회복 / 병원">
+      <button class="btn btn-primary btn-sm" onclick="addBlackout()">추가</button>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('modalBlackout')">닫기</button>
+    </div>
+  </div>
+</div>
+
 <!-- 백업 모달 -->
 <div class="modal-bg" id="modalBackup">
   <div class="modal">
@@ -1368,6 +1469,7 @@ const KEYS = {
   history: 'tracker_history',
   japan: 'tracker_japan',
   goals: 'tracker_goals',
+  blackouts: 'tracker_blackouts',
   lastBackup: 'tracker_last_backup',
 };
 
@@ -1418,6 +1520,7 @@ let state = {
   history: [],
   japan: [],
   goals: { min: 3, max: 4 },
+  blackouts: [],
 };
 
 function load(key, def) {
@@ -1456,6 +1559,43 @@ function fmtDeadline(dateStr) {
   if (diff <= 3) return { text: `D-${diff}`, cls: 'urgent', days: diff };
   return { text: `D-${diff}`, cls: 'safe', days: diff };
 }
+
+function fmtDeadlineWithTime(vol) {
+  const base = fmtDeadline(vol.deadline);
+  if (vol.deadlineTime) base.text += ` ${vol.deadlineTime}`;
+  return base;
+}
+function deadlineSortKey(vol) {
+  if (!vol.deadline) return '9999-12-31T23:59';
+  return vol.deadline + 'T' + (vol.deadlineTime || '23:59');
+}
+function dateAddStr(dateStr, days) {
+  const d = new Date(dateStr);
+  d.setHours(0,0,0,0);
+  d.setDate(d.getDate() + days);
+  return dateToStr(d);
+}
+function isBlackout(dateStr) {
+  return state.blackouts && state.blackouts.some(b => b.date === dateStr);
+}
+function workingDaysUntil(deadlineStr) {
+  if (!deadlineStr) return 999;
+  const today = todayStr();
+  let count = 0;
+  let cur = today;
+  let guard = 0;
+  while (cur <= deadlineStr && guard < 400) {
+    if (!isBlackout(cur)) count++;
+    cur = dateAddStr(cur, 1);
+    guard++;
+  }
+  return Math.max(0, count);
+}
+function getBlackoutLabel(dateStr) {
+  const b = state.blackouts && state.blackouts.find(x => x.date === dateStr);
+  return b ? b.label : '';
+}
+
 function calcPrice(vol, pub) {
   if (pub.mode === 'page') return Math.round((vol.totalPages || 0) * pub.price);
   if (pub.mode === 'manual') return 0;
@@ -1478,6 +1618,7 @@ function init() {
   state.history = load(KEYS.history, []);
   state.japan = load(KEYS.japan, []);
   state.goals = load(KEYS.goals, { min: 3, max: 4 });
+  state.blackouts = load(KEYS.blackouts, []);
   if (!load(KEYS.publishers, null)) save(KEYS.publishers, state.publishers);
 
   // 마이그레이션: 옛 키 → 새 키, 사용 안 하는 단계 정리 (촬영/퇴고 등)
@@ -1661,6 +1802,65 @@ function renderEvolution() {
   `;
 }
 
+
+function renderRecoveryPanel() {
+  const panel = document.getElementById('recoveryPanel');
+  if (!panel) return;
+  const items = state.active
+    .filter(v => !v.delivered && v.totalPages)
+    .map(v => {
+      const left = Math.max(0, (v.totalPages || 0) - (v.pagesDone || 0));
+      const dl = fmtDeadlineWithTime(v);
+      const days = v.deadline ? workingDaysUntil(v.deadline) : 999;
+      const perDay = days >= 999 ? 0 : Math.ceil(left / Math.max(1, days));
+      let status = '';
+      if (dl.days !== null && dl.days < 0) status = 'danger';
+      else if (perDay >= 35 || (dl.days !== null && dl.days <= 1)) status = 'danger';
+      else if (perDay >= 25 || (dl.days !== null && dl.days <= 3)) status = 'warn';
+      return { v, left, dl, days, perDay, status };
+    })
+    .sort((a,b) => deadlineSortKey(a.v).localeCompare(deadlineSortKey(b.v)));
+
+  if (items.length === 0) {
+    panel.className = 'recovery-panel empty';
+    panel.innerHTML = '';
+    return;
+  }
+
+  const today = todayStr();
+  const todayBlocked = isBlackout(today);
+  const totalToday = items
+    .filter(x => x.v.deadline && x.left > 0 && x.days < 999)
+    .reduce((sum, x) => sum + (todayBlocked ? 0 : x.perDay), 0);
+  const blockedMsg = todayBlocked ? `오늘 작업불가일(${esc(getBlackoutLabel(today) || '표시됨')})` : `오늘 최소 ${totalToday}p`;
+
+  let html = `<div class="recovery-top">
+    <div>
+      <div class="recovery-title">🧯 복구 브리핑</div>
+      <div class="recovery-sub">남은 페이지를 마감일까지 나눈 값이에요. 작업불가일은 계산에서 제외됩니다.</div>
+    </div>
+    <div class="recovery-total">${blockedMsg}</div>
+  </div>`;
+  html += '<div class="recovery-list">';
+  items.slice(0, 6).forEach(x => {
+    const className = x.status ? ` ${x.status}` : '';
+    const dayText = x.days >= 999 ? '마감 없음' : `작업일 ${x.days}일`;
+    const pageText = x.days >= 999 ? `${x.left}p 남음` : `${x.left}p 남음 · 하루 ${x.perDay}p`;
+    let note = '';
+    if (x.status === 'danger') note = '일정 조정/우선순위 확인 필요';
+    else if (x.status === 'warn') note = '오늘 조금이라도 손대야 함';
+    else note = '현재 속도 유지';
+    html += `<div class="recovery-item${className}">
+      <div class="recovery-main"><span class="recovery-name">${esc(x.v.title)} ${esc(x.v.volNum)}</span><span class="recovery-pill">${esc(x.dl.text)}</span></div>
+      <div class="recovery-detail">${pageText} · ${dayText}</div>
+      <div class="recovery-note">${note}</div>
+    </div>`;
+  });
+  html += '</div>';
+  panel.className = 'recovery-panel';
+  panel.innerHTML = html;
+}
+
 function renderCheer(st) {
   const cheer = document.getElementById('cheer');
   const max = state.goals.max || 0;
@@ -1698,7 +1898,7 @@ function renderActive() {
     if (!ad && !bd) return a.createdAt - b.createdAt;
     if (!ad) return 1;
     if (!bd) return -1;
-    return ad.localeCompare(bd);
+    return deadlineSortKey(a).localeCompare(deadlineSortKey(b));
   });
 
   // 그룹핑: 도장 카드 / 월별 / 미정
@@ -1790,7 +1990,7 @@ function getWeekKey(d) {
 }
 
 function renderVolCard(vol, pub) {
-  const dl = fmtDeadline(vol.deadline);
+  const dl = fmtDeadlineWithTime(vol);
   const isOverdue = dl.cls === 'overdue';
   const steps = STEPS[pub.mode] || [];
   const done = vol.steps || {};
@@ -1882,6 +2082,7 @@ function openNewVolume() {
   document.getElementById('newVolNum').value = '';
   document.getElementById('newVolPages').value = '';
   document.getElementById('newVolDeadline').value = '';
+  document.getElementById('newVolDeadlineTime').value = '';
   // 자동완성 데이터
   const titles = [...new Set([...state.active.map(v => v.title), ...state.history.map(h => h.title)])];
   document.getElementById('titleSuggest').innerHTML = titles.map(t => `<option value="${esc(t)}">`).join('');
@@ -1902,6 +2103,7 @@ function editVolume(id) {
   document.getElementById('newVolNum').value = vol.volNum || '';
   document.getElementById('newVolPages').value = vol.totalPages || '';
   document.getElementById('newVolDeadline').value = vol.deadline || '';
+  document.getElementById('newVolDeadlineTime').value = vol.deadlineTime || '';
   document.getElementById('modalNewVol').classList.add('show');
 }
 
@@ -1912,6 +2114,7 @@ function saveVolume() {
   const volNum = document.getElementById('newVolNum').value.trim();
   const pages = parseInt(document.getElementById('newVolPages').value) || 0;
   const deadline = document.getElementById('newVolDeadline').value;
+  const deadlineTime = document.getElementById('newVolDeadlineTime').value;
   if (!title) { alert('작품명을 입력해주세요'); return; }
   if (!volNum) { alert('권 번호를 입력해주세요'); return; }
   // 거래처 유효성 검증 (유령 데이터 방지)
@@ -1923,13 +2126,13 @@ function saveVolume() {
     const vol = state.active.find(v => v.id === id);
     if (vol) {
       vol.pubId = pubId; vol.title = title; vol.volNum = finalNum;
-      vol.totalPages = pages; vol.deadline = deadline;
+      vol.totalPages = pages; vol.deadline = deadline; vol.deadlineTime = deadlineTime;
     }
   } else {
     state.active.push({
       id: uid(), pubId, title, volNum: finalNum,
       totalPages: pages, pagesDone: 0,
-      deadline, steps: {}, createdAt: Date.now(),
+      deadline, deadlineTime, steps: {}, createdAt: Date.now(),
     });
   }
   save(KEYS.active, state.active);
@@ -2207,6 +2410,45 @@ function deleteJapan() {
   }
 }
 
+
+function openBlackoutMgmt() {
+  renderBlackoutList();
+  document.getElementById('blackoutDate').value = todayStr();
+  document.getElementById('blackoutLabel').value = '';
+  document.getElementById('modalBlackout').classList.add('show');
+}
+function renderBlackoutList() {
+  const area = document.getElementById('blackoutList');
+  if (!area) return;
+  const sorted = [...(state.blackouts || [])].sort((a,b) => a.date.localeCompare(b.date));
+  if (sorted.length === 0) {
+    area.innerHTML = '<div class="empty" style="padding:12px">등록된 작업불가일 없음</div>';
+    return;
+  }
+  area.innerHTML = sorted.map(b => `<div class="blackout-row">
+    <div><span class="date">${esc(b.date)}</span><span class="label">${esc(b.label || '작업불가')}</span></div>
+    <button class="icon-btn" onclick="deleteBlackout('${b.id}')">🗑️</button>
+  </div>`).join('');
+}
+function addBlackout() {
+  const date = document.getElementById('blackoutDate').value;
+  const label = document.getElementById('blackoutLabel').value.trim() || '작업불가';
+  if (!date) { alert('날짜를 선택해주세요'); return; }
+  state.blackouts = (state.blackouts || []).filter(b => b.date !== date);
+  state.blackouts.push({ id: uid(), date, label });
+  save(KEYS.blackouts, state.blackouts);
+  renderBlackoutList();
+  render();
+  showToast('작업불가일 추가됨');
+}
+function deleteBlackout(id) {
+  state.blackouts = (state.blackouts || []).filter(b => b.id !== id);
+  save(KEYS.blackouts, state.blackouts);
+  renderBlackoutList();
+  render();
+  showToast('작업불가일 삭제됨');
+}
+
 function renderJapan() {
   const area = document.getElementById('japanArea');
   if (state.japan.length === 0) {
@@ -2302,8 +2544,8 @@ function undoDeliver(id) {
       // 이미 archive된 경우 새로 만들기
       state.active.push({
         id: uid(), pubId: h.pubId, title: h.title, volNum: h.volNum,
-        totalPages: h.pages || 0, pagesDone: h.pages || 0, deadline: '',
-        steps: { '넘버링': true, 'OCR': true, '윤문기': true, '번역': true, '발송': true },
+        totalPages: h.pages || 0, pagesDone: h.pages || 0, deadline: '', deadlineTime: '',
+        steps: { '넘버링': true, 'OCR': true, '윤문기': true, '번역': true },
         createdAt: Date.now(),
       });
     }
@@ -2368,7 +2610,7 @@ function openBackup() {
   }
   // 저장 데이터 정보
   const info = document.getElementById('storageInfo');
-  info.textContent = `진행 중 ${state.active.length}권 / 납품 이력 ${state.history.length}건 / 일본거래처 ${state.japan.length}건 / 거래처 ${state.publishers.length}곳`;
+  info.textContent = `진행 중 ${state.active.length}권 / 납품 이력 ${state.history.length}건 / 일본거래처 ${state.japan.length}건 / 거래처 ${state.publishers.length}곳 / 작업불가일 ${(state.blackouts||[]).length}건`;
   document.getElementById('modalBackup').classList.add('show');
 }
 
@@ -2382,6 +2624,7 @@ function exportBackup() {
       history: state.history,
       japan: state.japan,
       goals: state.goals,
+      blackouts: state.blackouts || [],
     }
   };
   const json = JSON.stringify(backup, null, 2);
@@ -2419,6 +2662,7 @@ function importBackup(event) {
       if (backup.data.history) { state.history = backup.data.history; save(KEYS.history, state.history); }
       if (backup.data.japan) { state.japan = backup.data.japan; save(KEYS.japan, state.japan); }
       if (backup.data.goals) { state.goals = backup.data.goals; save(KEYS.goals, state.goals); }
+      if (backup.data.blackouts) { state.blackouts = backup.data.blackouts; save(KEYS.blackouts, state.blackouts); }
       closeModal('modalBackup');
       render();
       showToast('✅ 복원 완료');
@@ -2682,6 +2926,7 @@ function render() {
   renderStats();
   renderEvolution();
   renderUrgentAlert();
+  renderRecoveryPanel();
   renderActive();
   renderJapan();
   renderHistory();

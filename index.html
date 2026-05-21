@@ -2418,9 +2418,11 @@ function collectSecretaryBriefing() {
   if (must.length === 0 && prepare.length === 0) {
     const setupTarget = soon[0] || defer[0] || active[0];
     if (setupTarget) {
+      // 이미 완료한 단계(OCR 등)를 다시 권하지 않도록,
+      // 브리핑용 action은 각 권의 실제 미완료 단계(pending)를 반영한 getBriefingAction 결과를 그대로 쓴다.
       nice.push({
         ...setupTarget,
-        action: 'OCR 또는 윤문기 세팅만 해두면 미래의 쿠키가 고마워함.',
+        action: setupTarget.action || getBriefingAction(setupTarget.vol, setupTarget),
         note: '단, 오늘 체력이 없으면 보류 가능.'
       });
     }

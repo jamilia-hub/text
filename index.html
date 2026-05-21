@@ -1237,6 +1237,121 @@ body {
   .recovery-total { white-space: normal; }
 }
 
+
+/* 신뢰도 탭 — 뽈랑이 듀오 */
+.trust-summary-card {
+  background: linear-gradient(135deg, #fffaf0 0%, #ffffff 100%);
+  border: 1px solid var(--border);
+  border-left: 5px solid var(--accent);
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 12px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.trust-summary-main { flex: 1; min-width: 0; }
+.trust-summary-title { font-weight: 800; font-size: 1.02em; margin-bottom: 6px; }
+.trust-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  font-size: 0.8em;
+}
+.trust-summary-grid div {
+  background: rgba(92,122,92,0.07);
+  border: 1px solid rgba(92,122,92,0.12);
+  border-radius: 8px;
+  padding: 7px 8px;
+  min-width: 0;
+}
+.trust-summary-grid strong { display:block; color: var(--accent); font-size: 1.05em; }
+.trust-mascot-duo {
+  width: 62px;
+  height: 62px;
+  border-radius: 18px;
+  background: var(--surface2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.85em;
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+}
+.trust-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 11px 12px;
+  margin-bottom: 8px;
+  overflow: hidden;
+}
+.trust-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+}
+.trust-name { font-weight: 800; font-size: 0.95em; }
+.trust-meta { font-size: 0.78em; color: var(--text2); margin-top: 2px; }
+.trust-duo-small { font-size: 1.5em; line-height: 1; flex-shrink: 0; }
+.trust-bar {
+  height: 9px;
+  background: var(--surface2);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-top: 8px;
+}
+.trust-fill { height: 100%; border-radius: 999px; transition: width 0.25s; }
+.trust-fill.stable { background: #7fa184; }
+.trust-fill.good { background: #c8b96d; }
+.trust-fill.caution { background: #d69a5f; }
+.trust-fill.danger { background: #b86565; }
+.trust-status-pill {
+  display: inline-block;
+  font-size: 0.74em;
+  font-weight: 800;
+  border-radius: 999px;
+  padding: 2px 7px;
+  margin-left: 4px;
+  background: rgba(92,122,92,0.10);
+  color: var(--accent);
+}
+.trust-status-pill.danger { background: rgba(168,58,58,0.10); color: var(--danger); }
+.trust-status-pill.caution { background: rgba(214,138,58,0.12); color: var(--warn); }
+.trust-detail {
+  display: none;
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px solid var(--border);
+  font-size: 0.82em;
+  color: var(--text2);
+  line-height: 1.55;
+}
+.trust-detail.show { display: block; }
+.trust-detail-row { margin: 3px 0; }
+.trust-log {
+  margin-top: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+}
+.trust-log-title { font-weight: 800; margin-bottom: 8px; }
+.trust-log-item {
+  padding: 7px 0;
+  border-top: 1px solid var(--border);
+  font-size: 0.8em;
+  color: var(--text2);
+}
+.trust-log-item:first-of-type { border-top: none; }
+@media (max-width: 520px) {
+  .trust-summary-card { align-items: flex-start; }
+  .trust-summary-grid { grid-template-columns: 1fr; }
+  .trust-mascot-duo { width: 52px; height: 52px; font-size: 1.55em; }
+}
+
 </style>
 </head>
 <body>
@@ -1255,6 +1370,7 @@ body {
   <div class="tabs">
     <button class="tab-btn active" id="tab-main" onclick="switchTab('main')">📊 메인</button>
     <button class="tab-btn" id="tab-calendar" onclick="switchTab('calendar')">📅 달력</button>
+    <button class="tab-btn" id="tab-trust" onclick="switchTab('trust')">🛡️ 신뢰도</button>
   </div>
 
   <div class="tab-content active" id="content-main">
@@ -1328,6 +1444,10 @@ body {
       🔴 도장 = 그날 납품 / 일자 누르면 디테일
     </div>
     <div id="calMonthList"></div>
+  </div>
+
+  <div class="tab-content" id="content-trust">
+    <div id="trustArea"></div>
   </div>
 
 </div>
@@ -2987,6 +3107,7 @@ function switchTab(tab) {
   document.getElementById('tab-' + tab).classList.add('active');
   document.getElementById('content-' + tab).classList.add('active');
   if (tab === 'calendar') renderCalendar();
+  if (tab === 'trust') renderTrust();
   // 스크롤 맨 위로
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
@@ -3221,6 +3342,120 @@ function openDayDetail(dStr) {
   document.getElementById('modalDayDetail').classList.add('show');
 }
 
+
+function getTrustStatus(score) {
+  if (score >= 85) return 'stable';
+  if (score >= 70) return 'good';
+  if (score >= 55) return 'caution';
+  return 'danger';
+}
+function getTrustStatusLabel(score) {
+  return { stable: '안정', good: '양호', caution: '주의', danger: '위험' }[getTrustStatus(score)];
+}
+function getTrustDuo(score) {
+  const status = getTrustStatus(score);
+  if (status === 'stable') return '😸😺';
+  if (status === 'good') return '🙂🐱';
+  if (status === 'caution') return '😟🐱';
+  return '😾💦';
+}
+function getTrustCatLine(score) {
+  const status = getTrustStatus(score);
+  if (status === 'stable') return '좋은 흐름 유지 중이다냥';
+  if (status === 'good') return '현재는 무난하다냥';
+  if (status === 'caution') return '슬슬 신경 써야 한다냥';
+  return '하악! 방치 금지다냥';
+}
+function getRecentTrustChange(pubId) {
+  const h = [...state.history]
+    .filter(x => x.pubId === pubId && x.trustDelta !== undefined)
+    .sort((a,b) => String(b.deliveredAt || '').localeCompare(String(a.deliveredAt || '')))[0];
+  return h || null;
+}
+function getNextTrustImpact(pubId) {
+  const vols = state.active
+    .filter(v => v.pubId === pubId && !v.delivered)
+    .sort((a,b) => deadlineSortKey(a).localeCompare(deadlineSortKey(b)));
+  if (!vols.length) return '진행 중인 권 없음';
+  const v = vols[0];
+  return `${esc(v.title)} ${esc(v.volNum)} · ${getProjectedTrustText(v)}`;
+}
+function toggleTrustDetail(pubId) {
+  const el = document.getElementById('trust-detail-' + pubId);
+  if (el) el.classList.toggle('show');
+}
+function renderTrust() {
+  const area = document.getElementById('trustArea');
+  if (!area) return;
+  ensureTrustScores();
+  const pubs = state.publishers.map(pub => ({
+    pub,
+    score: getTrustScore(pub.id),
+  }));
+  if (!pubs.length) {
+    area.innerHTML = '<div class="empty">거래처 없음</div>';
+    return;
+  }
+  const avg = Math.round(pubs.reduce((s, x) => s + x.score, 0) / pubs.length);
+  const best = [...pubs].sort((a,b) => b.score - a.score)[0];
+  const worst = [...pubs].sort((a,b) => a.score - b.score)[0];
+  const recent = [...state.history]
+    .filter(h => h.trustDelta !== undefined)
+    .sort((a,b) => String(b.deliveredAt || '').localeCompare(String(a.deliveredAt || '')))[0];
+  let html = `
+    <div class="trust-summary-card">
+      <div class="trust-summary-main">
+        <div class="trust-summary-title">🛡️ 거래처 신뢰도</div>
+        <div class="trust-summary-grid">
+          <div><span>평균 신뢰도</span><strong>${avg}</strong></div>
+          <div><span>가장 안정</span><strong>${esc(best.pub.name)} ${best.score}</strong></div>
+          <div><span>관리 필요</span><strong>${esc(worst.pub.name)} ${worst.score}</strong></div>
+          <div><span>최근 반영</span><strong>${recent ? `${esc(recent.pubName)} ${formatTrustDelta(recent.trustDelta)}` : '없음'}</strong></div>
+        </div>
+      </div>
+      <div class="trust-mascot-duo" title="뽈랑이 듀오">${getTrustDuo(avg)}</div>
+    </div>
+  `;
+  pubs.forEach(({ pub, score }) => {
+    const status = getTrustStatus(score);
+    const label = getTrustStatusLabel(score);
+    const recentPub = getRecentTrustChange(pub.id);
+    const activeCount = state.active.filter(v => v.pubId === pub.id && !v.delivered).length;
+    html += `
+      <div class="trust-card">
+        <div class="trust-card-header" onclick="toggleTrustDetail('${pub.id}')">
+          <div style="flex:1; min-width:0;">
+            <div class="trust-name">${esc(pub.name)}</div>
+            <div class="trust-meta">${score}점 · ${label} · 진행 중 ${activeCount}권 <span class="trust-status-pill ${status}">${getTrustCatLine(score)}</span></div>
+          </div>
+          <div class="trust-duo-small">${getTrustDuo(score)}</div>
+        </div>
+        <div class="trust-bar"><div class="trust-fill ${status}" style="width:${score}%"></div></div>
+        <div class="trust-detail" id="trust-detail-${pub.id}">
+          <div class="trust-detail-row"><strong>현재 신뢰도:</strong> ${score}점 · ${label}</div>
+          <div class="trust-detail-row"><strong>최근 변화:</strong> ${recentPub ? `${esc(recentPub.title)} ${esc(recentPub.volNum)} · ${formatTrustDelta(recentPub.trustDelta)} (${esc(recentPub.trustReason || '')})` : '아직 반영 이력 없음'}</div>
+          <div class="trust-detail-row"><strong>다음 예상:</strong> ${getNextTrustImpact(pub.id)}</div>
+          <div class="trust-detail-row"><strong>기본 규칙:</strong> 정시 납품 +1 · 1일 지연 -8 · 2일 지연 -14</div>
+        </div>
+      </div>
+    `;
+  });
+  const logs = [...state.history]
+    .filter(h => h.trustDelta !== undefined)
+    .sort((a,b) => String(b.deliveredAt || '').localeCompare(String(a.deliveredAt || '')))
+    .slice(0, 10);
+  html += `<div class="trust-log"><div class="trust-log-title">최근 신뢰도 변화 로그</div>`;
+  if (!logs.length) {
+    html += `<div class="trust-log-item">아직 로그 없음</div>`;
+  } else {
+    logs.forEach(h => {
+      html += `<div class="trust-log-item">${esc(h.deliveredAt)} · ${esc(h.pubName)} · ${esc(h.title)} ${esc(h.volNum)} · <span class="${h.trustDelta >= 0 ? 'history-trust-plus' : 'history-trust-minus'}">${formatTrustDelta(h.trustDelta)}</span> ${esc(h.trustReason || '')}</div>`;
+    });
+  }
+  html += `</div>`;
+  area.innerHTML = html;
+}
+
 function render() {
   renderStats();
   renderEvolution();
@@ -3230,9 +3465,11 @@ function render() {
   renderActive();
   renderJapan();
   renderHistory();
-  // 달력 탭이 활성화돼있으면 같이 갱신
+  // 달력/신뢰도 탭이 활성화돼있으면 같이 갱신
   const calContent = document.getElementById('content-calendar');
   if (calContent && calContent.classList.contains('active')) renderCalendar();
+  const trustContent = document.getElementById('content-trust');
+  if (trustContent && trustContent.classList.contains('active')) renderTrust();
 }
 
 function renderUrgentAlert() {

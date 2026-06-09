@@ -1584,12 +1584,32 @@ body {
       <div class="help">기존 작품명은 자동완성 됩니다</div>
     </div>
     <div class="form-row">
-      <label>권 번호</label>
-      <input type="text" id="newVolNum" placeholder="예: 5권 또는 5">
+      <label>표시 번호 (선택)</label>
+      <input type="text" id="newVolNum" placeholder="예: 5권 / 12화 / 단권이면 비워둠">
+      <div class="help">비워두면 작품명만 표시됩니다</div>
     </div>
     <div class="form-row">
       <label>총 페이지 (본격 번역 분량)</label>
       <input type="number" id="newVolPages" inputmode="numeric" placeholder="예: 192">
+    </div>
+    <div class="form-row">
+      <label>정산 방식</label>
+      <select id="newVolPayMode" onchange="updatePayOverrideUI()">
+        <option value="default">거래처 기본 단가 사용</option>
+        <option value="volume">권당 단가 직접 입력</option>
+        <option value="episode">화별 단가 직접 입력</option>
+        <option value="page">페이지 단가 직접 입력</option>
+        <option value="fixed">고정 금액 직접 입력</option>
+      </select>
+      <div class="help" id="newVolPayHelp">특수 정산일 때만 바꾸면 됩니다</div>
+    </div>
+    <div class="form-row" id="payValueRow" style="display:none">
+      <label id="newVolPayValueLabel">단가</label>
+      <input type="number" id="newVolPayValue" inputmode="decimal" step="0.01" placeholder="예: 20">
+    </div>
+    <div class="form-row" id="payQtyRow" style="display:none">
+      <label>화수</label>
+      <input type="number" id="newVolPayQty" inputmode="decimal" step="0.1" min="0" placeholder="예: 3">
     </div>
     <div class="form-row">
       <label>마감일</label>
@@ -2012,7 +2032,7 @@ function getMascotQuest(vol) {
   const left = Math.max(0, total - pages);
   const pct = total > 0 ? Math.round((pages / total) * 100) : 0;
   let img = MASCOT_IMAGES.work;
-  let title = `🐾 오늘의 마감 퀘스트: ${esc(vol.title)} ${esc(vol.volNum)}`;
+  let title = `🐾 오늘의 마감 퀘스트: ${escFullTitle(vol.title, vol.volNum)}`;
   let sub = '';
   let reward = '보상: 뽈뽈이 응원 +1';
   if (dl.cls === 'overdue' || (dl.days !== null && dl.days <= 0)) img = MASCOT_IMAGES.warn;
@@ -2081,7 +2101,33 @@ function getBlackoutLabel(dateStr) {
   return b ? b.label : '';
 }
 
+function getPayMode(vol) {
+  const mode = vol && vol.payMode;
+  return ['default', 'volume', 'episode', 'page', 'fixed'].includes(mode) ? mode : 'default';
+}
+function getPayLabel(vol, pub) {
+  const mode = getPayMode(vol);
+  if (mode === 'default') return '';
+  const value = parseFloat(vol.payValue) || 0;
+  const qty = parseFloat(vol.payQty) || 1;
+  if (mode === 'volume') return `권당 ${value}만원`;
+  if (mode === 'episode') return `화별 ${qty}화 × ${value}만원`;
+  if (mode === 'page') return `페이지 ${value}원/p`;
+  if (mode === 'fixed') return `고정 ${fmtMoney(value)}`;
+  return '';
+}
+function getPayMeta(vol, pub) {
+  const label = getPayLabel(vol, pub);
+  return label ? ` · ${label}` : '';
+}
 function calcPrice(vol, pub) {
+  const mode = getPayMode(vol);
+  const value = parseFloat(vol.payValue);
+  const qty = parseFloat(vol.payQty);
+  if (mode === 'volume') return isNaN(value) ? 0 : Math.round(value * 10000);
+  if (mode === 'episode') return isNaN(value) ? 0 : Math.round(value * 10000 * (isNaN(qty) || qty <= 0 ? 1 : qty));
+  if (mode === 'page') return isNaN(value) ? 0 : Math.round((vol.totalPages || 0) * value);
+  if (mode === 'fixed') return isNaN(value) ? 0 : Math.round(value);
   if (pub.mode === 'page') return Math.round((vol.totalPages || 0) * pub.price);
   if (pub.mode === 'manual') return 0;
   return pub.price * 10000;
@@ -2095,6 +2141,12 @@ function showToast(msg) {
 function esc(s) {
   if (!s) return '';
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function fullTitle(title, volNum) {
+  return `${title || ''}${volNum ? ' ' + volNum : ''}`;
+}
+function escFullTitle(title, volNum) {
+  return esc(fullTitle(title, volNum));
 }
 
 function init() {
@@ -2366,7 +2418,7 @@ function makeBriefingListItem(item) {
   const vol = item.vol;
   const pub = item.pub;
   const dl = item.dl;
-  const title = `${esc(vol.title)} ${esc(vol.volNum)}`;
+  const title = escFullTitle(vol.title, vol.volNum);
   const pubName = pub ? esc(pub.name) : '거래처 미상';
   const dText = esc(getBriefingDdayText(dl));
   const progress = esc(getProgressLine(vol));
@@ -2523,7 +2575,7 @@ function renderRecoveryPanel() {
     else if (x.status === 'warn') note = '오늘 조금이라도 손대야 함';
     else note = '현재 속도 유지';
     html += `<div class="recovery-item${className}">
-      <div class="recovery-main"><span class="recovery-name">${esc(x.v.title)} ${esc(x.v.volNum)}</span><span class="recovery-pill">${esc(x.dl.text)}</span></div>
+      <div class="recovery-main"><span class="recovery-name">${escFullTitle(x.v.title, x.v.volNum)}</span><span class="recovery-pill">${esc(x.dl.text)}</span></div>
       <div class="recovery-detail">${pageText} · ${dayText}</div>
       <div class="recovery-note">${note}</div>
     </div>`;
@@ -2678,9 +2730,9 @@ function renderVolCard(vol, pub) {
     h += `<div class="delivered-stamp"><span>또</span><span>해냄</span></div>`;
     h += `<div class="card-title">`;
     h += `<span class="title-name">${esc(vol.title)}</span>`;
-    h += `<span class="title-vol">${esc(vol.volNum)}</span>`;
+    if (vol.volNum) h += `<span class="title-vol">${esc(vol.volNum)}</span>`;
     h += `</div>`;
-    h += `<div class="card-meta">${esc(pub.name)} · ${fmtMoney(price)} · ${esc(vol.deliveredAt || '')}</div>`;
+    h += `<div class="card-meta">${esc(pub.name)} · ${fmtMoney(price)}${getPayMeta(vol, pub)} · ${esc(vol.deliveredAt || '')}</div>`;
     h += `<div class="row-actions" style="margin-top:4px;justify-content:flex-end;display:flex;">`;
     h += `<button class="icon-btn" onclick="archiveDelivered('${vol.id}')" title="이력으로 이동">📤</button>`;
     h += `</div>`;
@@ -2692,13 +2744,13 @@ function renderVolCard(vol, pub) {
   // 제목줄 (D-day 포함)
   html += `<div class="card-title">`;
   html += `<span class="title-name">${esc(vol.title)}</span>`;
-  html += `<span class="title-vol">${esc(vol.volNum)}</span>`;
+  if (vol.volNum) html += `<span class="title-vol">${esc(vol.volNum)}</span>`;
   if (vol.deadline) {
     html += `<span class="deadline ${dl.cls}">${dl.text}</span>`;
   }
   html += `</div>`;
   // 거래처 · 가격
-  html += `<div class="card-meta">${esc(pub.name)} · ${fmtMoney(price)}</div>`;
+  html += `<div class="card-meta">${esc(pub.name)} · ${fmtMoney(price)}${getPayMeta(vol, pub)}</div>`;
   const trustScore = getTrustScore(pub.id);
   html += `<div class="trust-line trust-${trustMood(trustScore)}"><span class="trust-score-pill">🛡️ 신뢰 ${trustScore}점</span> · ${esc(getProjectedTrustText(vol))}</div>`;
 
@@ -2745,6 +2797,66 @@ function renderVolCard(vol, pub) {
   return html;
 }
 
+function updatePayOverrideUI() {
+  const mode = document.getElementById('newVolPayMode')?.value || 'default';
+  const valueRow = document.getElementById('payValueRow');
+  const qtyRow = document.getElementById('payQtyRow');
+  const valueInput = document.getElementById('newVolPayValue');
+  const label = document.getElementById('newVolPayValueLabel');
+  const help = document.getElementById('newVolPayHelp');
+  if (!valueRow || !qtyRow || !label || !help) return;
+
+  valueRow.style.display = mode === 'default' ? 'none' : '';
+  qtyRow.style.display = mode === 'episode' ? '' : 'none';
+
+  if (mode === 'default') {
+    help.textContent = '특수 정산일 때만 바꾸면 됩니다';
+  } else if (mode === 'volume') {
+    label.textContent = '권당 단가 (만원)';
+    if (valueInput) valueInput.placeholder = '예: 20';
+    help.textContent = '이 작업만 거래처 기본 권당 단가 대신 이 값을 씁니다';
+  } else if (mode === 'episode') {
+    label.textContent = '화당 단가 (만원)';
+    if (valueInput) valueInput.placeholder = '예: 3.5';
+    help.textContent = '화수 × 화당 단가로 정산합니다';
+  } else if (mode === 'page') {
+    label.textContent = '페이지 단가 (원/p)';
+    if (valueInput) valueInput.placeholder = '예: 1100';
+    help.textContent = '총 페이지 × 페이지 단가로 정산합니다';
+  } else if (mode === 'fixed') {
+    label.textContent = '고정 금액 (원)';
+    if (valueInput) valueInput.placeholder = '예: 180000';
+    help.textContent = '입력한 금액을 그대로 정산합니다';
+  }
+}
+
+function readPayOverrideForm() {
+  const mode = document.getElementById('newVolPayMode')?.value || 'default';
+  if (mode === 'default') return { mode: 'default' };
+  const value = parseFloat(document.getElementById('newVolPayValue').value);
+  const qty = parseFloat(document.getElementById('newVolPayQty').value);
+  if (isNaN(value) || value < 0) return { error: '정산 단가를 입력해주세요' };
+  if (mode === 'episode' && (isNaN(qty) || qty <= 0)) return { error: '화수를 입력해주세요' };
+  return {
+    mode,
+    payValue: value,
+    payQty: mode === 'episode' ? qty : undefined,
+  };
+}
+
+function applyPayOverride(vol, pay) {
+  if (!pay || pay.mode === 'default') {
+    delete vol.payMode;
+    delete vol.payValue;
+    delete vol.payQty;
+    return;
+  }
+  vol.payMode = pay.mode;
+  vol.payValue = pay.payValue;
+  if (pay.mode === 'episode') vol.payQty = pay.payQty;
+  else delete vol.payQty;
+}
+
 function openNewVolume() {
   document.getElementById('newVolTitle').firstChild.textContent = '➕ 새 권 시작 ';
   document.getElementById('editVolId').value = '';
@@ -2757,6 +2869,10 @@ function openNewVolume() {
   document.getElementById('newVolPages').value = '';
   document.getElementById('newVolDeadline').value = '';
   document.getElementById('newVolDeadlineTime').value = '';
+  document.getElementById('newVolPayMode').value = 'default';
+  document.getElementById('newVolPayValue').value = '';
+  document.getElementById('newVolPayQty').value = '1';
+  updatePayOverrideUI();
   // 자동완성 데이터
   const titles = [...new Set([...state.active.map(v => v.title), ...state.history.map(h => h.title)])];
   document.getElementById('titleSuggest').innerHTML = titles.map(t => `<option value="${esc(t)}">`).join('');
@@ -2778,6 +2894,10 @@ function editVolume(id) {
   document.getElementById('newVolPages').value = vol.totalPages || '';
   document.getElementById('newVolDeadline').value = vol.deadline || '';
   document.getElementById('newVolDeadlineTime').value = vol.deadlineTime || '';
+  document.getElementById('newVolPayMode').value = vol.payMode || 'default';
+  document.getElementById('newVolPayValue').value = vol.payValue ?? '';
+  document.getElementById('newVolPayQty').value = vol.payQty ?? '1';
+  updatePayOverrideUI();
   document.getElementById('modalNewVol').classList.add('show');
 }
 
@@ -2789,25 +2909,29 @@ function saveVolume() {
   const pages = parseInt(document.getElementById('newVolPages').value) || 0;
   const deadline = document.getElementById('newVolDeadline').value;
   const deadlineTime = document.getElementById('newVolDeadlineTime').value;
+  const pay = readPayOverrideForm();
   if (!title) { alert('작품명을 입력해주세요'); return; }
-  if (!volNum) { alert('권 번호를 입력해주세요'); return; }
+  if (pay.error) { alert(pay.error); return; }
   // 거래처 유효성 검증 (유령 데이터 방지)
   if (!pubId || !state.publishers.find(p => p.id === pubId)) {
     alert('거래처를 선택해주세요'); return;
   }
-  const finalNum = /\d+권$/.test(volNum) ? volNum : (/^\d+$/.test(volNum) ? volNum + '권' : volNum);
+  const finalNum = volNum ? (/\d+권$/.test(volNum) ? volNum : (/^\d+$/.test(volNum) ? volNum + '권' : volNum)) : '';
   if (id) {
     const vol = state.active.find(v => v.id === id);
     if (vol) {
       vol.pubId = pubId; vol.title = title; vol.volNum = finalNum;
       vol.totalPages = pages; vol.deadline = deadline; vol.deadlineTime = deadlineTime;
+      applyPayOverride(vol, pay);
     }
   } else {
-    state.active.push({
+    const vol = {
       id: uid(), pubId, title, volNum: finalNum,
       totalPages: pages, pagesDone: 0,
       deadline, deadlineTime, steps: {}, createdAt: Date.now(),
-    });
+    };
+    applyPayOverride(vol, pay);
+    state.active.push(vol);
   }
   save(KEYS.active, state.active);
   closeModal('modalNewVol');
@@ -2905,6 +3029,10 @@ function deliverVolume(id) {
     id: historyId, pubId: vol.pubId, pubName: pub.name,
     title: vol.title, volNum: vol.volNum,
     price: calcPrice(vol, pub), pages: vol.totalPages,
+    payMode: vol.payMode || 'default',
+    payValue: vol.payValue,
+    payQty: vol.payQty,
+    payLabel: getPayLabel(vol, pub),
     deliveredAt: todayStr(),
     trustDelta: trustChange.delta,
     trustReason: trustChange.reason,
@@ -2918,7 +3046,7 @@ function deliverVolume(id) {
   save(KEYS.active, state.active);
   save(KEYS.history, state.history);
   render();
-  showToast(`🎉 ${vol.title} ${vol.volNum} 납품! 신뢰 ${formatTrustDelta(trustChange.delta)} (${trustChange.reason})`);
+  showToast(`🎉 ${vol.title}${vol.volNum ? ' ' + vol.volNum : ''} 납품! 신뢰 ${formatTrustDelta(trustChange.delta)} (${trustChange.reason})`);
 }
 
 // 도장 카드를 진행 중에서 치우기 (이력엔 남음)
@@ -3211,10 +3339,11 @@ function renderHistory() {
   const sorted = [...state.history].sort((a, b) => b.deliveredAt.localeCompare(a.deliveredAt));
   let html = '<div class="history-list">';
   sorted.slice(0, 50).forEach(h => {
+    const payText = h.payLabel ? ` · ${esc(h.payLabel)}` : '';
     html += `<div class="history-item">
       <div class="history-info">
-        <div class="history-title">${esc(h.title)} ${esc(h.volNum)}</div>
-        <div class="history-sub">${esc(h.deliveredAt)} · ${esc(h.pubName)}${h.trustDelta !== undefined ? ` · <span class="${h.trustDelta >= 0 ? 'history-trust-plus' : 'history-trust-minus'}">신뢰 ${formatTrustDelta(h.trustDelta)}</span> ${esc(h.trustReason || '')}` : ''}</div>
+        <div class="history-title">${esc(h.title)}${h.volNum ? ' ' + esc(h.volNum) : ''}</div>
+        <div class="history-sub">${esc(h.deliveredAt)} · ${esc(h.pubName)}${payText}${h.trustDelta !== undefined ? ` · <span class="${h.trustDelta >= 0 ? 'history-trust-plus' : 'history-trust-minus'}">신뢰 ${formatTrustDelta(h.trustDelta)}</span> ${esc(h.trustReason || '')}` : ''}</div>
       </div>
       <div class="history-price">${fmtMoney(h.price)}</div>
       <div class="history-actions">
@@ -3244,12 +3373,18 @@ function undoDeliver(id) {
       delete existing.historyId;
     } else {
       // 이미 archive된 경우 새로 만들기
-      state.active.push({
+      const restored = {
         id: uid(), pubId: h.pubId, title: h.title, volNum: h.volNum,
         totalPages: h.pages || 0, pagesDone: h.pages || 0, deadline: '', deadlineTime: '',
         steps: { '넘버링': true, 'OCR': true, '윤문기': true, '번역': true },
         createdAt: Date.now(),
+      };
+      applyPayOverride(restored, {
+        mode: h.payMode || 'default',
+        payValue: h.payValue,
+        payQty: h.payQty,
       });
+      state.active.push(restored);
     }
     if (h.trustDelta !== undefined) {
       const curTrust = getTrustScore(h.pubId);
@@ -3292,8 +3427,22 @@ function deleteHistory(id) {
 function exportHistory() {
   if (state.history.length === 0) { alert('이력 없음'); return; }
   const sorted = [...state.history].sort((a,b) => b.deliveredAt.localeCompare(a.deliveredAt));
-  let csv = '날짜,거래처,작품,권,금액,신뢰변화,신뢰사유,신뢰전,신뢰후\n';
-  sorted.forEach(h => { csv += `${h.deliveredAt},${h.pubName},${h.title},${h.volNum},${h.price},${h.trustDelta ?? ''},${h.trustReason ?? ''},${h.trustBefore ?? ''},${h.trustAfter ?? ''}\n`; });
+  const csvCell = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  let csv = '날짜,거래처,작품,표시번호,정산방식,금액,신뢰변화,신뢰사유,신뢰전,신뢰후\n';
+  sorted.forEach(h => {
+    csv += [
+      h.deliveredAt,
+      h.pubName,
+      h.title,
+      h.volNum,
+      h.payLabel || '',
+      h.price,
+      h.trustDelta ?? '',
+      h.trustReason ?? '',
+      h.trustBefore ?? '',
+      h.trustAfter ?? '',
+    ].map(csvCell).join(',') + '\n';
+  });
   const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -3566,7 +3715,7 @@ function renderCalMonthList(monthStr) {
     group.items.sort((a, b) => b.deliveredAt.localeCompare(a.deliveredAt));
     group.items.forEach(h => {
       const dd = parseInt(h.deliveredAt.slice(8));
-      html += `<div class="pub-group-item">${esc(h.title)} ${esc(h.volNum)} <span class="pub-group-meta">· ${dd}일 · ${fmtMoney(h.price)}</span></div>`;
+      html += `<div class="pub-group-item">${escFullTitle(h.title, h.volNum)} <span class="pub-group-meta">· ${dd}일 · ${fmtMoney(h.price)}</span></div>`;
     });
     html += `</div>`;
   });
@@ -3604,7 +3753,7 @@ function openDayDetail(dStr) {
     const total = delivers.reduce((s, h) => s + (h.price || 0), 0);
     html += `<div class="day-section"><h4>🎉 납품 (${delivers.length}권 · ${fmtMoney(total)})</h4>`;
     delivers.forEach(h => {
-      html += `<div class="day-item"><strong>${esc(h.title)} ${esc(h.volNum)}</strong> · ${esc(h.pubName)} · ${fmtMoney(h.price)}</div>`;
+      html += `<div class="day-item"><strong>${escFullTitle(h.title, h.volNum)}</strong> · ${esc(h.pubName)} · ${fmtMoney(h.price)}</div>`;
     });
     html += `</div>`;
   }
@@ -3622,7 +3771,7 @@ function openDayDetail(dStr) {
     deadlines.forEach(v => {
       const pub = state.publishers.find(p => p.id === v.pubId);
       const status = v.delivered ? ' · ✓ 납품필' : '';
-      html += `<div class="day-item"><strong>${esc(v.title)} ${esc(v.volNum)}</strong> · ${pub ? esc(pub.name) : ''}${status}</div>`;
+      html += `<div class="day-item"><strong>${escFullTitle(v.title, v.volNum)}</strong> · ${pub ? esc(pub.name) : ''}${status}</div>`;
     });
     html += `</div>`;
   }
@@ -3668,7 +3817,7 @@ function getNextTrustImpact(pubId) {
     .sort((a,b) => deadlineSortKey(a).localeCompare(deadlineSortKey(b)));
   if (!vols.length) return '진행 중인 권 없음';
   const v = vols[0];
-  return `${esc(v.title)} ${esc(v.volNum)} · ${getProjectedTrustText(v)}`;
+  return `${escFullTitle(v.title, v.volNum)} · ${getProjectedTrustText(v)}`;
 }
 function toggleTrustDetail(pubId) {
   const el = document.getElementById('trust-detail-' + pubId);
@@ -3723,7 +3872,7 @@ function renderTrust() {
         <div class="trust-bar"><div class="trust-fill ${status}" style="width:${score}%"></div></div>
         <div class="trust-detail" id="trust-detail-${pub.id}">
           <div class="trust-detail-row"><strong>현재 신뢰도:</strong> ${score}점 · ${label}</div>
-          <div class="trust-detail-row"><strong>최근 변화:</strong> ${recentPub ? `${esc(recentPub.title)} ${esc(recentPub.volNum)} · ${formatTrustDelta(recentPub.trustDelta)} (${esc(recentPub.trustReason || '')})` : '아직 반영 이력 없음'}</div>
+          <div class="trust-detail-row"><strong>최근 변화:</strong> ${recentPub ? `${escFullTitle(recentPub.title, recentPub.volNum)} · ${formatTrustDelta(recentPub.trustDelta)} (${esc(recentPub.trustReason || '')})` : '아직 반영 이력 없음'}</div>
           <div class="trust-detail-row"><strong>다음 예상:</strong> ${getNextTrustImpact(pub.id)}</div>
           <div class="trust-detail-row"><strong>기본 규칙:</strong> 정시 납품 +1 · 1일 지연 -8 · 2일 지연 -14</div>
         </div>
@@ -3739,7 +3888,7 @@ function renderTrust() {
     html += `<div class="trust-log-item">아직 로그 없음</div>`;
   } else {
     logs.forEach(h => {
-      html += `<div class="trust-log-item">${esc(h.deliveredAt)} · ${esc(h.pubName)} · ${esc(h.title)} ${esc(h.volNum)} · <span class="${h.trustDelta >= 0 ? 'history-trust-plus' : 'history-trust-minus'}">${formatTrustDelta(h.trustDelta)}</span> ${esc(h.trustReason || '')}</div>`;
+      html += `<div class="trust-log-item">${esc(h.deliveredAt)} · ${esc(h.pubName)} · ${escFullTitle(h.title, h.volNum)} · <span class="${h.trustDelta >= 0 ? 'history-trust-plus' : 'history-trust-minus'}">${formatTrustDelta(h.trustDelta)}</span> ${esc(h.trustReason || '')}</div>`;
     });
   }
   html += `</div>`;
@@ -3842,7 +3991,7 @@ function renderUrgentAlert() {
       if (u.dDay < 0) dStr = `${Math.abs(u.dDay)}일 지남`;
       else if (u.dDay === 0) dStr = '오늘 마감';
       else dStr = `D-${u.dDay}`;
-      html += `<li>${esc(u.vol.title)} ${esc(u.vol.volNum)} <strong>${dStr}</strong> — ${u.issues.map(x=>x+' X').join(' / ')}</li>`;
+      html += `<li>${escFullTitle(u.vol.title, u.vol.volNum)} <strong>${dStr}</strong> — ${u.issues.map(x=>x+' X').join(' / ')}</li>`;
     });
     html += '</ul></div>';
   }
@@ -3856,7 +4005,7 @@ function renderUrgentAlert() {
       let dStr;
       if (u.dDay === 0) dStr = '오늘 마감';
       else dStr = `D-${u.dDay}`;
-      html += `<li>${esc(u.vol.title)} ${esc(u.vol.volNum)} <strong>${dStr}</strong> — ${u.issues.join(', ')} 권장</li>`;
+      html += `<li>${escFullTitle(u.vol.title, u.vol.volNum)} <strong>${dStr}</strong> — ${u.issues.join(', ')} 권장</li>`;
     });
     html += '</ul></div>';
   }
